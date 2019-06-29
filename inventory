@@ -2,4 +2,4 @@
 Linux    ansible_host=192.168.145.158 ansible_user=root ansible_sshprivate_key_file=/root/.ssh/id_rsa
 
 [web]
-Linux1    ansible_host=192.168.145.157 ansible_user=root ansible_sshprivate_key_file=/root/.ssh/id_rsa
+Linux1    ansible_host=192.168.145.159 ansible_user=root ansible_sshprivate_key_file=/root/.ssh/id_rsa
