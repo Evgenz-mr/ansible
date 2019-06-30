@@ -88,11 +88,6 @@
       name: firewalld
       daemon_reload: yes  
 
-  - name: Start service tomcat, if not started
-    service:
-      name: tomcat
-      state: started
-
   - name: restart service daemon
     shell: systemctl daemon-reload
 
