@@ -4,37 +4,47 @@
   become: yes
 
 
+# Tomcat versions available
+# 8.0.50
+# 8.0.52
+# 8.0.53
+
   vars:
-    - tomcat_version: tomcat-8.0.53
-    - java_version: java-12.0.1-openjdk
-    
-  
+    - remote_host: 192.168.145.155
+    - tomcat_version: 8.0.53
+    - tomcat_tar_archive: apache-tomcat-{{ tomcat_version }}.tar.gz
+    - tomcat_storage: tomcat-{{ tomcat_version }}
+
   tasks:
   - name: Update and upgrade yum packages
     yum: name=* state=latest update_cache=yes
 
+  - name: Install net-tools
+    yum: name=net-tools state=latest
+
+  - name: Install curl
+    yum: name=curl state=latest
+
   - name: Install JDK
-    yum: name=java-12-openjdk-devel state=present
+    yum: name=java-1.8.0-openjdk-devel state=latest
 
   - name: JAVA-HOME set
-    shell: "echo JAVA_HOME=/usr/java/jdk-12.0.1/bin/java >/etc/environment"
+    shell: "echo JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.212.b04-0.el7_6.x86_64/jre/bin/java >/etc/environment"
 
   - name: add group "tomcat"
     group: name=tomcat
 
   - name: add user "tomcat"
     user: name=tomcat group=tomcat home=/opt/tomcat/ createhome=no
-    become: True
-    become_method: sudo
 
   - name: Download Tomcat
     get_url:
-      url: http://archive.apache.org/dist/tomcat/tomcat-8/v8.0.53/bin/apache-tomcat-8.0.53.tar.gz
-      dest: /opt/apache-tomcat-8.0.53.tar.gz
+      url: http://archive.apache.org/dist/tomcat/tomcat-8/v{{ tomcat_version }}/bin/{{ tomcat_tar_archive }}
+      dest: /opt/{{ tomcat_tar_archive }}
 
   - name: Create directory
     file:
-      path=/opt/tomcat/{{ tomcat_version }}
+      path=/opt/tomcat/{{ tomcat_storage }}
       mode=0755
       owner=tomcat
       group=tomcat
@@ -42,8 +52,8 @@
   
   - name: Extract archive
     unarchive: 
-      src: /opt/apache-tomcat-8.0.53.tar.gz
-      dest: /opt/tomcat/{{ tomcat_version }}/
+      src: /opt/{{ tomcat_tar_archive }}
+      dest: /opt/tomcat/{{ tomcat_storage }}/
       remote_src: yes
       extra_opts: [--strip-components=1]
 
@@ -56,33 +66,48 @@
   - name: Configure Tomcat users
     copy:
       src: tomcat-users.xml
-      dest: /opt/tomcat/{{ tomcat_version }}/conf/
+      dest: /opt/tomcat/{{ tomcat_storage }}/conf/
       mode: 0755
 
   - name: Configure Tomcat context
     copy:
       src: context.xml
-      dest: /opt/tomcat/{{ tomcat_version }}/webapps/manager/META-INF/
+      dest: /opt/tomcat/{{ tomcat_storage }}/webapps/manager/META-INF/
       mode: 0755
 
   - name: set owner tomcat
     shell: chown -R tomcat:tomcat /opt/tomcat
+
+  - name: Set Firewalld
+    firewalld:
+      port: 8080/tcp
+      permanent: yes
+      state: enabled
+  
+  - name: restart service firewall
+    systemd:
+      name: firewalld
+      daemon_reload: yes  
 
   - name: Start service tomcat, if not started
     service:
       name: tomcat
       state: started
 
-  - name: Java version 
-    debug: 
-      msg: "Java version: {{ java_version }}" 
+  - name: restart service daemon
+    shell: systemctl daemon-reload
 
-  - name: Tomcat version 
-    debug: 
-      msg: "Tomcat version: {{ tomcat_version }}"
+  - name: restart service Tomcat
+    service:
+      name: tomcat
+      state: restarted
   
+  - name: Java version 
+    shell: java -version 
+    register: java 
+
   - name: Availability check (with curl) to Tomcat
-    shell: curl -I http://192.168.145.159:8080 | grep HTTP  
+    shell: curl -I http://{{ remote_host }}:8080 | grep HTTP  
     register: res1
 
   - name: Availability check (systemd) to Tomcat
@@ -94,8 +119,11 @@
     register: res3
 
   - name: Checking user "student" exists
-    shell: cat /opt/tomcat/{{ tomcat_version }}/conf/tomcat-users.xml | grep "username"
+    shell: cat /opt/tomcat/{{ tomcat_storage }}/conf/tomcat-users.xml | grep "username"
     register: res4 
+
+  - name: Check JAVA version
+    debug: var=java
 
   - name: Check service Tomcat with curl
     debug: var=res1
