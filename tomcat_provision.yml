@@ -4,18 +4,13 @@
   become: yes
 
 
-
 # Tomcat versions available
 # 8.0.50
 # 8.0.52
 # 8.0.53
-#
-#
-### Match IP-address in your remote_host ###
-
 
   vars:
-    - remote_host: 192.168.145.155
+    - remote_host: 192.168.145.157
     - tomcat_version: 8.0.53
     - tomcat_tar_archive: apache-tomcat-{{ tomcat_version }}.tar.gz
     - tomcat_storage: tomcat-{{ tomcat_version }}
