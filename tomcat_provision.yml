@@ -91,10 +91,10 @@
   - name: restart service daemon
     shell: systemctl daemon-reload
 
-  - name: restart service Tomcat
+  - name: Start service tomcat, if not started
     service:
       name: tomcat
-      state: restarted
+      state: started
   
   - name: Java version 
     shell: java -version 
