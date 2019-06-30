@@ -6,14 +6,10 @@
 
 # Tomcat versions available
 # 8.0.50
-# 8.0.51
 # 8.0.52
 # 8.0.53
-#
-### Match your IP-address in remote_host (this is need for checking tomcat service started) 
 
   vars:
-    - remote_host: 192.168.145.157
     - tomcat_version: 8.0.53
     - tomcat_tar_archive: apache-tomcat-{{ tomcat_version }}.tar.gz
     - tomcat_storage: tomcat-{{ tomcat_version }}
@@ -110,7 +106,7 @@
     register: java 
 
   - name: Availability check (with curl) to Tomcat
-    shell: curl -I http://{{ remote_host }}:8080 | grep HTTP  
+    shell: curl -I http://localhost:8080 | grep HTTP  
     register: res1
 
   - name: Availability check (systemd) to Tomcat
@@ -126,18 +122,17 @@
     register: res4 
 
   - name: Check JAVA version
-    debug: var=java
+    debug: var=java.stderr
 
   - name: Check service Tomcat with curl
-    debug: var=res1
+    debug: var=res1.stdout_lines
 
   - name: Check service Tomcat with systemd
-    debug: var=res2
+    debug: var=res2.stdout_lines
 
   - name: Check service port Tomcat
-    debug: var=res3
+    debug: var=res3.stdout_lines
  
   - name: Checking user 
-    debug: var=res4
-
+    debug: var=res4.stdout_lines
   
