@@ -10,7 +10,7 @@
 # 8.0.52
 # 8.0.53
 #
-### Match your IP-address in remote_host (is's need for checking tomcat service started) 
+### Match your IP-address in remote_host (this is need for checking tomcat service started) 
 
   vars:
     - remote_host: 192.168.145.157
