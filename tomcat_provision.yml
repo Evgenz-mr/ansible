@@ -4,10 +4,15 @@
   become: yes
 
 
+
 # Tomcat versions available
 # 8.0.50
 # 8.0.52
 # 8.0.53
+#
+#
+### Match IP-address in your remote_host ###
+
 
   vars:
     - remote_host: 192.168.145.155
