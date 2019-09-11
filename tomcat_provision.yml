@@ -1,0 +1,133 @@
+---
+- name: Connection to my servers
+  hosts: Linux1
+  become: yes
+
+
+# Tomcat versions available
+# 8.0.50
+# 8.0.52
+# 8.0.53
+
+  vars:
+    - tomcat_version: 8.0.53
+    - tomcat_tar_archive: apache-tomcat-{{ tomcat_version }}.tar.gz
+    - tomcat_storage: tomcat-{{ tomcat_version }}
+
+  tasks:
+  - name: Update and upgrade yum packages
+    yum: name=* state=latest update_cache=yes
+
+  - name: Install net-tools
+    yum: name=net-tools state=latest
+
+  - name: Install curl
+    yum: name=curl state=latest
+
+  - name: Install JDK
+    yum: name=java-1.8.0-openjdk-devel state=latest
+
+  - name: JAVA-HOME set
+    shell: "echo JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.212.b04-0.el7_6.x86_64/jre/bin/java >/etc/environment"
+
+  - name: add group "tomcat"
+    group: name=tomcat
+
+  - name: add user "tomcat"
+    user: name=tomcat group=tomcat home=/opt/tomcat/ createhome=no
+
+  - name: Download Tomcat
+    get_url:
+      url: http://archive.apache.org/dist/tomcat/tomcat-8/v{{ tomcat_version }}/bin/{{ tomcat_tar_archive }}
+      dest: /opt/{{ tomcat_tar_archive }}
+
+  - name: Create directory
+    file:
+      path=/opt/tomcat/{{ tomcat_storage }}
+      mode=0755
+      owner=tomcat
+      group=tomcat
+      state=directory
+  
+  - name: Extract archive
+    unarchive: 
+      src: /opt/{{ tomcat_tar_archive }}
+      dest: /opt/tomcat/{{ tomcat_storage }}/
+      remote_src: yes
+      extra_opts: [--strip-components=1]
+
+  - name: Configure Tomcat service
+    copy:
+      src: tomcat.service
+      dest: /etc/systemd/system/
+      mode: 0755
+
+  - name: Configure Tomcat users
+    copy:
+      src: tomcat-users.xml
+      dest: /opt/tomcat/{{ tomcat_storage }}/conf/
+      mode: 0755
+
+  - name: Configure Tomcat context
+    copy:
+      src: context.xml
+      dest: /opt/tomcat/{{ tomcat_storage }}/webapps/manager/META-INF/
+      mode: 0755
+
+  - name: set owner tomcat
+    shell: chown -R tomcat:tomcat /opt/tomcat
+
+  - name: Set Firewalld
+    firewalld:
+      port: 8080/tcp
+      permanent: yes
+      state: enabled
+  
+  - name: restart service firewall
+    systemd:
+      name: firewalld
+      daemon_reload: yes  
+
+  - name: restart service daemon
+    shell: systemctl daemon-reload
+
+  - name: Start service tomcat, if not started
+    service:
+      name: tomcat
+      state: started
+  
+  - name: Java version 
+    shell: java -version 
+    register: java 
+
+  - name: Availability check (with curl) to Tomcat
+    shell: curl -I http://localhost:8080 | grep HTTP  
+    register: res1
+
+  - name: Availability check (systemd) to Tomcat
+    shell: systemctl status tomcat | grep active
+    register: res2
+  
+  - name: Availability (check port) Tomcat
+    shell: netstat -tlnp | grep ":8080"
+    register: res3
+
+  - name: Checking user "student" exists
+    shell: cat /opt/tomcat/{{ tomcat_storage }}/conf/tomcat-users.xml | grep "username"
+    register: res4 
+
+  - name: Check JAVA version
+    debug: var=java.stderr
+
+  - name: Check service Tomcat with curl
+    debug: var=res1.stdout_lines
+
+  - name: Check service Tomcat with systemd
+    debug: var=res2.stdout_lines
+
+  - name: Check service port Tomcat
+    debug: var=res3.stdout_lines
+ 
+  - name: Checking user 
+    debug: var=res4.stdout_lines
+  
