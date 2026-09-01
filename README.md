@@ -23,8 +23,6 @@ Target servers (ansible_admin)
 
 ### 1. Authenticate to Teleport
 
-Use the Teleport proxy, username and authentication method assigned to your environment:
-
 ```bash
 tsh login --proxy=<teleport-proxy>:443 --user=<teleport-user> --auth=<auth-method>
 ```
@@ -35,35 +33,28 @@ Verify that the jump host is accessible:
 tsh ssh <teleport-user>@dev-ansible-jumphost
 ```
 
-### 2. Generate an OpenSSH configuration from Teleport
+### 2. Generate OpenSSH configuration
 
 ```bash
 mkdir -p ~/.ssh
 tsh config > ~/.ssh/teleport_config
+chmod 600 ~/.ssh/teleport_config
 ```
 
-The generated file contains the Teleport SSH certificate paths and a `ProxyCommand` using `tsh proxy ssh`.
-
-Check it if necessary:
-
-```bash
-cat ~/.ssh/teleport_config
-```
-
-Teleport node names in this configuration use the cluster suffix. For example:
+Teleport nodes in the generated config normally use the cluster suffix, for example:
 
 ```text
 dev-ansible-jumphost.main
 ```
 
-### 3. Test OpenSSH access to the jump host
+### 3. Test the jump host
 
 ```bash
 ssh -F ~/.ssh/teleport_config \
   <teleport-user>@dev-ansible-jumphost.main
 ```
 
-### 4. Test the complete SSH path to a target server
+### 4. Test a target through the jump host
 
 ```bash
 ssh \
@@ -73,15 +64,7 @@ ssh \
   ansible_admin@<target-ip>
 ```
 
-If this command succeeds, the complete path is working:
-
-```text
-Mac -> Teleport -> jump host -> target server
-```
-
-### 5. Configure the Ansible inventory
-
-Example:
+### 5. Ansible SSH options
 
 ```yaml
 ---
@@ -94,103 +77,125 @@ all:
       -F /Users/<mac-user>/.ssh/teleport_config
       -o ProxyJump=<teleport-user>@dev-ansible-jumphost.main
       -o StrictHostKeyChecking=no
-
-  children:
-    vps_in:
-      hosts:
-        vps_in_1:
-          ansible_host: <target-ip-1>
-        vps_in_2:
-          ansible_host: <target-ip-2>
-      vars:
-        ansible_become: true
-        ansible_become_method: sudo
+      -o ServerAliveInterval=30
+      -o ServerAliveCountMax=6
+      -o ConnectTimeout=20
 ```
 
-Do not commit passwords, private keys, Teleport certificates, real credentials or other secrets to the repository. Prefer Ansible Vault or an external secret store for secrets required by inventories or playbooks.
+The critical option is `ansible_ssh_common_args`: Ansible passes these arguments to OpenSSH for connections to managed hosts.
 
-### 6. Test Ansible before running a playbook
+Equivalent one-off test:
 
-Test one host first:
+```bash
+ansible -i inventory-dev.yml vps_in_1 \
+  -m ping -vvv \
+  --ssh-common-args='-F /Users/<mac-user>/.ssh/teleport_config -o ProxyJump=<teleport-user>@dev-ansible-jumphost.main -o StrictHostKeyChecking=no'
+```
+
+Full details: [docs/teleport-ansible-options.md](docs/teleport-ansible-options.md).
+
+### 6. Test Ansible
 
 ```bash
 ansible -i inventory-dev.yml vps_in_1 -m ping -vvv
 ```
 
-Expected result:
-
-```text
-SUCCESS
-"ping": "pong"
-```
-
-Then run a playbook against one host:
+Then one host:
 
 ```bash
 ansible-playbook -i inventory-dev.yml playbook.yml --limit vps_in_1
 ```
 
-After validation, run it against the required group:
+Then the group:
 
 ```bash
 ansible-playbook -i inventory-dev.yml playbook.yml --limit vps_in
 ```
 
-### How file transfer works
+### Internet access on targets
 
-The jump host does not become the Ansible control node. Ansible still runs locally on the Mac. Files referenced by modules such as `copy` and `template` originate on the Mac and are transferred to the target through the SSH connection established via Teleport and the jump host.
+The jump host does not become the Ansible control node. Files used by `copy`, `template`, etc. originate on the Mac and travel through the SSH connection.
 
-The target servers themselves still need network access for tasks that download content remotely. For example, this task runs `apt` on the target, not on the Mac:
+Package operations are different: `apt`, `dnf`, image pulls and other downloads execute on the managed host. Therefore target hosts still need their own route/NAT/proxy/mirror access to the required repositories.
 
-```yaml
-- name: Update apt cache
-  ansible.builtin.apt:
-    update_cache: true
-  become: true
-```
-
-Therefore, if a playbook performs package installation or `apt update`, the relevant target host needs access to its configured package repositories (or an explicitly configured package proxy/mirror). A working Teleport/SSH path does not provide outbound Internet access to the target.
-
-### Troubleshooting
-
-If Ansible reports an SSH error such as:
-
-```text
-Connection closed by UNKNOWN port 65535
-```
-
-first test the complete SSH command from step 4. A common cause is using `ProxyJump=dev-ansible-jumphost` without loading the Teleport-generated SSH configuration or without the Teleport cluster suffix (for example `.main`).
-
-If SSH and `ansible -m ping` work but a playbook fails with:
+If SSH works but a playbook fails with:
 
 ```text
 Failed to update apt cache after 5 retries
 ```
 
-check outbound connectivity from the affected target server. For example:
+check the target:
 
 ```bash
-curl -4 -I --connect-timeout 10 https://archive.ubuntu.com/ubuntu/
 ip route
+getent ahosts archive.ubuntu.com
+curl -4 -I --connect-timeout 10 https://archive.ubuntu.com/ubuntu/
 ```
 
-If the connection times out, fix the target server's outbound route/NAT/firewall/proxy configuration rather than the Teleport or Ansible SSH settings.
+Fix the target's outbound networking rather than the Teleport SSH settings.
 
-### Summary
+---
 
-The working design is:
+## feature/teleport-secure-access
+
+This branch also contains an extended lab/reference setup for Teleport, Keycloak OIDC and encrypted IN/OUT transport.
+
+### Teleport + Keycloak
+
+Deployment guide:
+
+[docs/teleport-keycloak-deployment.md](docs/teleport-keycloak-deployment.md)
+
+Main playbook:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook \
+  -i inventory-secure.yml \
+  playbooks/teleport-keycloak.yml \
+  --ask-vault-pass
+```
+
+Components:
 
 ```text
-Ansible/playbooks/files on Mac
-          |
-          v
-Teleport SSH transport
-          |
-          v
-Ansible jump host
-          |
-          v
-Target hosts
+playbooks/teleport-keycloak.yml
+roles/teleport/
+roles/teleport_node/
+roles/keycloak/
+group_vars/teleport.yml
+group_vars/keycloak.yml
+examples/secure-access-inventory.yml
 ```
 
-Teleport and the jump host solve management-plane SSH access. Package repositories and other remote resources used by playbook tasks remain data-plane dependencies of the target hosts themselves.
+The Keycloak role starts PostgreSQL + Keycloak with Podman, creates the Teleport realm/client/group, and the Teleport role creates an OIDC connector mapping the Keycloak `teleport-users` group to a Teleport role.
+
+### Encrypted IN/OUT transport
+
+Guide:
+
+[docs/encrypted-in-out.md](docs/encrypted-in-out.md)
+
+Playbook:
+
+```bash
+ansible-playbook \
+  -i inventory-secure.yml \
+  playbooks/secure-in-out.yml \
+  --ask-vault-pass
+```
+
+This uses a standard WireGuard overlay for confidentiality/integrity between selected IN and OUT nodes. It is designed as normal encrypted service transport, while Teleport remains the management-access path.
+
+### Secrets
+
+Do not commit:
+
+- private SSH/WireGuard keys;
+- Teleport join tokens;
+- Teleport certificates;
+- Keycloak administrator/database passwords;
+- OIDC client secrets;
+- real production inventory credentials.
+
+Store them in Ansible Vault or an external secret manager.
