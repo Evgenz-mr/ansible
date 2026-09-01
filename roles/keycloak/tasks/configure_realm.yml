@@ -1,0 +1,68 @@
+---
+- name: Login to Keycloak admin CLI
+  ansible.builtin.command:
+    cmd: >-
+      podman exec {{ keycloak_container_name }}
+      /opt/keycloak/bin/kcadm.sh config credentials
+      --server http://127.0.0.1:8080
+      --realm master
+      --user {{ keycloak_admin_user }}
+      --password {{ keycloak_admin_password }}
+  no_log: true
+  changed_when: false
+
+- name: Check whether Teleport realm exists
+  ansible.builtin.command:
+    cmd: >-
+      podman exec {{ keycloak_container_name }}
+      /opt/keycloak/bin/kcadm.sh get realms/{{ keycloak_realm }}
+  register: keycloak_realm_check
+  changed_when: false
+  failed_when: false
+
+- name: Create Teleport realm
+  ansible.builtin.command:
+    cmd: >-
+      podman exec {{ keycloak_container_name }}
+      /opt/keycloak/bin/kcadm.sh create realms
+      -s realm={{ keycloak_realm }}
+      -s enabled=true
+  when: keycloak_realm_check.rc != 0
+
+- name: Query Teleport OIDC client
+  ansible.builtin.command:
+    cmd: >-
+      podman exec {{ keycloak_container_name }}
+      /opt/keycloak/bin/kcadm.sh get clients
+      -r {{ keycloak_realm }}
+      -q clientId={{ keycloak_teleport_client_id }}
+  register: keycloak_client_query
+  changed_when: false
+
+- name: Create Teleport confidential OIDC client when absent
+  ansible.builtin.command:
+    cmd: >-
+      podman exec {{ keycloak_container_name }}
+      /opt/keycloak/bin/kcadm.sh create clients
+      -r {{ keycloak_realm }}
+      -s clientId={{ keycloak_teleport_client_id }}
+      -s enabled=true
+      -s protocol=openid-connect
+      -s publicClient=false
+      -s standardFlowEnabled=true
+      -s secret={{ keycloak_teleport_client_secret }}
+      -s 'redirectUris=["{{ keycloak_teleport_redirect_uri }}"]'
+      -s 'webOrigins=["+"]'
+  when: "('\"clientId\" : \"' + keycloak_teleport_client_id + '\"') not in keycloak_client_query.stdout"
+  no_log: true
+
+- name: Ensure teleport-users group exists
+  ansible.builtin.command:
+    cmd: >-
+      podman exec {{ keycloak_container_name }}
+      /opt/keycloak/bin/kcadm.sh create groups
+      -r {{ keycloak_realm }}
+      -s name=teleport-users
+  register: keycloak_group_create
+  changed_when: keycloak_group_create.rc == 0
+  failed_when: keycloak_group_create.rc not in [0, 1]
