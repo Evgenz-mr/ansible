@@ -1,0 +1,66 @@
+---
+- name: Install Podman
+  ansible.builtin.apt:
+    name:
+      - podman
+    state: present
+    update_cache: true
+
+- name: Create Keycloak network
+  containers.podman.podman_network:
+    name: keycloak-net
+    state: present
+
+- name: Create PostgreSQL volume
+  containers.podman.podman_volume:
+    name: keycloak-postgres
+    state: present
+
+- name: Run PostgreSQL for Keycloak
+  containers.podman.podman_container:
+    name: keycloak-postgres
+    image: "{{ keycloak_postgres_image }}"
+    state: started
+    restart_policy: always
+    network:
+      - keycloak-net
+    volume:
+      - keycloak-postgres:/var/lib/postgresql/data:Z
+    env:
+      POSTGRES_DB: "{{ keycloak_db_name }}"
+      POSTGRES_USER: "{{ keycloak_db_user }}"
+      POSTGRES_PASSWORD: "{{ keycloak_db_password }}"
+  no_log: true
+
+- name: Run Keycloak
+  containers.podman.podman_container:
+    name: "{{ keycloak_container_name }}"
+    image: "{{ keycloak_image }}"
+    state: started
+    restart_policy: always
+    network:
+      - keycloak-net
+    publish:
+      - "{{ keycloak_http_port }}:8080"
+    command:
+      - start
+      - "--hostname={{ keycloak_hostname }}"
+      - "--http-enabled=true"
+      - "--proxy-headers=xforwarded"
+    env:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "{{ keycloak_admin_user }}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "{{ keycloak_admin_password }}"
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://keycloak-postgres:5432/{{ keycloak_db_name }}"
+      KC_DB_USERNAME: "{{ keycloak_db_user }}"
+      KC_DB_PASSWORD: "{{ keycloak_db_password }}"
+  no_log: true
+
+- name: Wait for Keycloak HTTP endpoint
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/realms/master"
+    status_code: 200
+  register: keycloak_ready
+  retries: 30
+  delay: 5
+  until: keycloak_ready.status == 200
