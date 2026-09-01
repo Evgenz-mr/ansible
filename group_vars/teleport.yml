@@ -1,0 +1,12 @@
+---
+teleport_cluster_name: "example.internal"
+teleport_public_addr: "teleport.example.com:443"
+teleport_auth_server: "teleport.example.com:3025"
+teleport_version: "18.2.1"
+teleport_join_method: "token"
+teleport_join_token: "{{ vault_teleport_join_token | default('CHANGE_ME_VIA_VAULT') }}"
+teleport_oidc_connector_name: "keycloak"
+teleport_oidc_client_id: "teleport"
+teleport_oidc_client_secret: "{{ vault_teleport_oidc_client_secret | default('CHANGE_ME_VIA_VAULT') }}"
+teleport_oidc_issuer_url: "https://keycloak.example.com/realms/teleport"
+teleport_oidc_redirect_url: "https://teleport.example.com:443/v1/webapi/oidc/callback"
