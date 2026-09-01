@@ -64,3 +64,6 @@
   retries: 30
   delay: 5
   until: keycloak_ready.status == 200
+
+- name: Configure Keycloak realm and Teleport client
+  ansible.builtin.import_tasks: configure_realm.yml
