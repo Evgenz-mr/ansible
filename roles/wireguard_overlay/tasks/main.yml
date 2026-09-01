@@ -1,0 +1,43 @@
+---
+- name: Validate WireGuard variables
+  ansible.builtin.assert:
+    that:
+      - wg_address is defined
+      - wg_private_key is defined
+      - wg_peer_public_key is defined
+      - wg_peer_endpoint is defined
+      - wg_peer_allowed_ips is defined
+    fail_msg: "WireGuard variables must be provided via inventory/Ansible Vault."
+
+- name: Install WireGuard
+  ansible.builtin.apt:
+    name:
+      - wireguard
+    state: present
+    update_cache: true
+
+- name: Create WireGuard configuration
+  ansible.builtin.copy:
+    dest: /etc/wireguard/wg0.conf
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      [Interface]
+      Address = {{ wg_address }}
+      PrivateKey = {{ wg_private_key }}
+      ListenPort = {{ wg_listen_port | default(51820) }}
+
+      [Peer]
+      PublicKey = {{ wg_peer_public_key }}
+      Endpoint = {{ wg_peer_endpoint }}
+      AllowedIPs = {{ wg_peer_allowed_ips }}
+      PersistentKeepalive = {{ wg_persistent_keepalive | default(25) }}
+  no_log: true
+  notify: Restart WireGuard
+
+- name: Enable WireGuard interface
+  ansible.builtin.systemd:
+    name: wg-quick@wg0
+    enabled: true
+    state: started
