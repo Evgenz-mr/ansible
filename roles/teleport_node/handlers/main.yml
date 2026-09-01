@@ -1,0 +1,5 @@
+---
+- name: Restart teleport node
+  ansible.builtin.systemd:
+    name: teleport
+    state: restarted
