@@ -1,0 +1,15 @@
+---
+keycloak_image: "quay.io/keycloak/keycloak:26.3"
+keycloak_container_name: "keycloak"
+keycloak_http_port: 8080
+keycloak_hostname: "keycloak.example.com"
+keycloak_admin_user: "admin"
+keycloak_admin_password: "{{ vault_keycloak_admin_password | default('CHANGE_ME_VIA_VAULT') }}"
+keycloak_db_name: "keycloak"
+keycloak_db_user: "keycloak"
+keycloak_db_password: "{{ vault_keycloak_db_password | default('CHANGE_ME_VIA_VAULT') }}"
+keycloak_postgres_image: "docker.io/library/postgres:16"
+keycloak_realm: "teleport"
+keycloak_teleport_client_id: "teleport"
+keycloak_teleport_client_secret: "{{ vault_teleport_oidc_client_secret | default('CHANGE_ME_VIA_VAULT') }}"
+keycloak_teleport_redirect_uri: "https://teleport.example.com:443/v1/webapi/oidc/callback"
