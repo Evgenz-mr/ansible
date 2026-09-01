@@ -1,0 +1,52 @@
+---
+- name: Install Teleport prerequisites
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: true
+
+- name: Download Teleport installer
+  ansible.builtin.get_url:
+    url: "https://cdn.teleport.dev/install-v{{ teleport_version }}.sh"
+    dest: /tmp/install-teleport.sh
+    mode: "0755"
+
+- name: Install Teleport
+  ansible.builtin.command:
+    cmd: "/tmp/install-teleport.sh {{ teleport_version }}"
+    creates: /usr/local/bin/teleport
+
+- name: Configure Teleport node
+  ansible.builtin.copy:
+    dest: /etc/teleport.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      version: v3
+      teleport:
+        nodename: {{ inventory_hostname }}
+        data_dir: /var/lib/teleport
+        join_params:
+          token_name: {{ teleport_join_token }}
+          method: {{ teleport_join_method }}
+        proxy_server: {{ teleport_public_addr }}
+      auth_service:
+        enabled: false
+      proxy_service:
+        enabled: false
+      ssh_service:
+        enabled: true
+        labels:
+          environment: dev
+          role: ansible-jumphost
+  no_log: true
+  notify: Restart teleport node
+
+- name: Enable and start Teleport node
+  ansible.builtin.systemd:
+    name: teleport
+    enabled: true
+    state: started
