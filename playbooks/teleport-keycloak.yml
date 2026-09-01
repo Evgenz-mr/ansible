@@ -1,0 +1,24 @@
+---
+- name: Deploy Teleport proxy/auth node
+  hosts: teleport
+  become: true
+  vars_files:
+    - ../group_vars/teleport.yml
+  roles:
+    - teleport
+
+- name: Deploy Keycloak identity provider
+  hosts: keycloak
+  become: true
+  vars_files:
+    - ../group_vars/keycloak.yml
+  roles:
+    - keycloak
+
+- name: Configure Teleport nodes
+  hosts: teleport_nodes
+  become: true
+  vars_files:
+    - ../group_vars/teleport.yml
+  roles:
+    - teleport_node
