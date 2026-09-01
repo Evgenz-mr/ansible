@@ -1,0 +1,12 @@
+---
+- name: Configure encrypted transport on IN nodes
+  hosts: vps_in
+  become: true
+  roles:
+    - wireguard_overlay
+
+- name: Configure encrypted transport on OUT nodes
+  hosts: vps_out
+  become: true
+  roles:
+    - wireguard_overlay
