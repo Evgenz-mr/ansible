@@ -1,0 +1,43 @@
+---
+all:
+  vars:
+    ansible_connection: ssh
+    ansible_user: ansible_admin
+    ansible_ssh_private_key_file: "/Users/<mac-user>/.ssh/id_ed25519_ansible"
+    ansible_ssh_common_args: >-
+      -F /Users/<mac-user>/.ssh/teleport_config
+      -o ProxyJump=<teleport-user>@dev-ansible-jumphost.main
+      -o StrictHostKeyChecking=no
+      -o ServerAliveInterval=30
+      -o ServerAliveCountMax=6
+      -o ConnectTimeout=20
+
+  children:
+    teleport:
+      hosts:
+        teleport_1:
+          ansible_host: <teleport-server-ip>
+
+    keycloak:
+      hosts:
+        keycloak_1:
+          ansible_host: <keycloak-server-ip>
+
+    teleport_nodes:
+      hosts:
+        dev_ansible_jumphost:
+          ansible_host: <jump-host-ip>
+
+    vps_in:
+      hosts:
+        vps_in_1:
+          ansible_host: <vps-in-1-ip>
+          wg_address: 10.90.0.11/24
+          wg_peer_name: vps_out_1
+
+    vps_out:
+      hosts:
+        vps_out_1:
+          ansible_host: <vps-out-1-ip>
+          wg_address: 10.90.0.21/24
+          wg_peer_name: vps_in_1
