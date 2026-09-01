@@ -1,0 +1,91 @@
+---
+- name: Install Teleport prerequisites
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: true
+
+- name: Download Teleport installer
+  ansible.builtin.get_url:
+    url: "https://cdn.teleport.dev/install-v{{ teleport_version }}.sh"
+    dest: /tmp/install-teleport.sh
+    mode: "0755"
+
+- name: Install Teleport
+  ansible.builtin.command:
+    cmd: "/tmp/install-teleport.sh {{ teleport_version }}"
+    creates: /usr/local/bin/teleport
+
+- name: Create Teleport configuration directory
+  ansible.builtin.file:
+    path: /etc/teleport
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure Teleport auth and proxy services
+  ansible.builtin.copy:
+    dest: /etc/teleport.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      version: v3
+      teleport:
+        nodename: {{ inventory_hostname }}
+        data_dir: /var/lib/teleport
+      auth_service:
+        enabled: true
+        cluster_name: {{ teleport_cluster_name }}
+        listen_addr: 0.0.0.0:3025
+      proxy_service:
+        enabled: true
+        web_listen_addr: 0.0.0.0:443
+        public_addr: {{ teleport_public_addr }}
+      ssh_service:
+        enabled: false
+  notify: Restart teleport
+
+- name: Enable and start Teleport
+  ansible.builtin.systemd:
+    name: teleport
+    enabled: true
+    state: started
+
+- name: Write Keycloak OIDC connector definition
+  ansible.builtin.copy:
+    dest: /etc/teleport/keycloak-oidc.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      kind: oidc
+      version: v3
+      metadata:
+        name: {{ teleport_oidc_connector_name }}
+      spec:
+        issuer_url: {{ teleport_oidc_issuer_url }}
+        client_id: {{ teleport_oidc_client_id }}
+        client_secret: {{ teleport_oidc_client_secret }}
+        redirect_url: {{ teleport_oidc_redirect_url }}
+        display: Keycloak
+        scope:
+          - openid
+          - profile
+          - email
+        claims_to_roles:
+          - claim: groups
+            value: teleport-users
+            roles:
+              - access
+  no_log: true
+
+- name: Apply Keycloak OIDC connector
+  ansible.builtin.command:
+    cmd: tctl create -f /etc/teleport/keycloak-oidc.yaml
+  register: teleport_oidc_apply
+  changed_when: "'created' in teleport_oidc_apply.stdout or 'updated' in teleport_oidc_apply.stdout"
+  no_log: true
